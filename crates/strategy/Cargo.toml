@@ -8,3 +8,9 @@ readme.workspace = true
 repository.workspace = true
 
 [dependencies]
+rust_decimal = {workspace = true, features = ["serde"]}
+serde = {workspace = true, features = ["derive"]}
+parking_lot.workspace = true
+thiserror.workspace = true
+rust_decimal_macros.workspace = true
+toml.workspace = true

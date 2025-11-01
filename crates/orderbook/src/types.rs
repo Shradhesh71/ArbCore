@@ -25,10 +25,10 @@ pub struct OrderbookSnapshot {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OrderbookDelta {
     pub symbol: String,
-    pub prev_sequence: Option<u64>,
-    pub sequence: Option<u64>,
     pub bids: Vec<Level>, // change list (price, size)
     pub asks: Vec<Level>,
+    pub prev_sequence: Option<u64>,
+    pub sequence: Option<u64>,
     pub ts: Option<u128>,
 }
 
