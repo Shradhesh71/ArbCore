@@ -94,7 +94,6 @@ pub struct LotRule {
 /// Primary Strategy configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StrategyConfig {
-    /// Symbol order for the triangle. Example: ["A/B", "B/C", "A/C"]
     pub triangle: Vec<String>,
 
     /// Base currency used as cycle start/end (e.g., "USDT")
@@ -104,7 +103,6 @@ pub struct StrategyConfig {
     #[serde(default)]
     pub fee_map: HashMap<String, FeeInfo>,
 
-    /// Limits and safety knobs
     #[serde(default)]
     pub limits: Limits,
 
@@ -112,7 +110,6 @@ pub struct StrategyConfig {
     #[serde(default)]
     pub aggression: Aggression,
 
-    /// Max concurrent trade plans allowed
     #[serde(default = "default_concurrency")]
     pub max_concurrent_plans: usize,
 
