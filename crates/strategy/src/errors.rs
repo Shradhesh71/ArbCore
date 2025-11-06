@@ -21,4 +21,17 @@ pub enum StrategyError {
     Internal(String),
 }
 
+impl Clone for StrategyError {
+    fn clone(&self) -> Self {
+        match self {
+            StrategyError::Io(e) => StrategyError::Internal(format!("io error: {}", e)),
+            StrategyError::Parse(s) => StrategyError::Parse(s.clone()),
+            StrategyError::Validation(s) => StrategyError::Validation(s.clone()),
+            StrategyError::QtyRoundedZero(s) => StrategyError::QtyRoundedZero(s.clone()),
+            StrategyError::MinNotional(s, d1, d2) => StrategyError::MinNotional(s.clone(), *d1, *d2),
+            StrategyError::Internal(s) => StrategyError::Internal(s.clone()),
+        }
+    }
+}
+
 pub type Result<T> = std::result::Result<T, StrategyError>;
