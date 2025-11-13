@@ -1,14 +1,7 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub mod manager;
+pub mod ws_client;
+// pub mod snapshot_sync;
+// pub mod triview;
+pub mod errors;
+pub mod types;
+pub mod adapter_wiring;

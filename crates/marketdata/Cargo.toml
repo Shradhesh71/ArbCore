@@ -8,3 +8,13 @@ readme.workspace = true
 repository.workspace = true
 
 [dependencies]
+tokio = { workspace = true, features = ["full"] }
+serde = { workspace = true, features = ["derive"] }
+thiserror.workspace = true
+# tracing.workspace = true
+orderbook = { path = "../orderbook" }
+reqwest.workspace = true
+tokio-tungstenite.workspace = true
+futures.workspace = true
+tracing.workspace = true
+rand.workspace= true
