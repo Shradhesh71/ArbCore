@@ -162,6 +162,9 @@ impl OrderBook {
         let r = self.inner.read();
         let bids = r.bids.iter().rev().map(|(p,s)| Level{price:*p, size:*s}).collect();
         let asks = r.asks.iter().map(|(p,s)| Level{price:*p, size:*s}).collect();
-        OrderbookSnapshot { symbol: self.symbol.clone(), bids, asks, sequence: r.last_seq, ts: todo!() }
+        let ts = r.last_update_ts.map(|instant| {
+            instant.elapsed().as_millis()
+        });
+        OrderbookSnapshot { symbol: self.symbol.clone(), bids, asks, sequence: r.last_seq, ts }
     }
 }

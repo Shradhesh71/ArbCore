@@ -2,19 +2,7 @@ use rust_decimal::{Decimal, prelude::One};
 use rust_decimal_macros::dec;
 
 use crate::FeeInfo;
-
-#[derive(Debug, Clone)]
-pub struct TriView {
-    pub sym_ab: String, // A/B
-    pub bids_ab: Vec<(Decimal, Decimal)>, // price, size (best-first)
-    pub asks_ab: Vec<(Decimal, Decimal)>,
-    pub sym_bc: String, // B/C
-    pub bids_bc: Vec<(Decimal, Decimal)>,
-    pub asks_bc: Vec<(Decimal, Decimal)>,
-    pub sym_ac: String, // A/C
-    pub bids_ac: Vec<(Decimal, Decimal)>,
-    pub asks_ac: Vec<(Decimal, Decimal)>,
-}
+use marketdata::TriView;
 
 #[derive(Debug, Clone)]
 pub struct Opportunity {

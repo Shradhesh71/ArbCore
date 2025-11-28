@@ -16,3 +16,5 @@ rust_decimal_macros.workspace = true
 toml.workspace = true
 tokio ={workspace = true, features = ["rt", "time", "macros", "sync"]}
 uuid = {workspace = true, features = ["v4"]}
+orderbook = { path = "../orderbook" }
+marketdata = { path = "../marketdata" }

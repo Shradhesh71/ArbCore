@@ -18,3 +18,4 @@ tokio-tungstenite.workspace = true
 futures.workspace = true
 tracing.workspace = true
 rand.workspace= true
+rust_decimal.workspace = true

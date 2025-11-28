@@ -1,10 +1,11 @@
 use std::{collections::HashMap, sync::{Arc, atomic::{AtomicU64, Ordering}}, time::{Duration, Instant}};
+use marketdata::TriView;
 use rust_decimal_macros::dec;
 use parking_lot::Mutex;
 use rust_decimal::Decimal;
 use tokio::sync::mpsc;
 
-use crate::{Opportunity, StrategyConfig, TriView, detect_triangular_opportunities, planner::build_trade_plan};
+use crate::{Opportunity, StrategyConfig, detect_triangular_opportunities, planner::build_trade_plan};
 
 #[derive(Debug, Clone)]
 pub struct OrderLeg {

@@ -7,7 +7,7 @@ readme = "README.md"
 repository = "https://github.com/Shradhesh71/arb"
 
 [workspace]
-members = [ "crates/marketdata",
+members = [ "crates/adapters", "crates/marketdata",
     "crates/orderbook", "crates/strategy", "crates/stroage",
 ]
 resolver = "2"
