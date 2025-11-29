@@ -113,7 +113,13 @@ impl MarketDataManager {
 
     pub async fn ensure_symbol(&self, symbol: &str) -> Result<SymbolUpdateTx, MarketDataError> {
         self.ensure_symbol_with_snapshot_provider(symbol, None).await
-    }    
+    }
+
+    /// Get the sender for a specific symbol (used by adapter wiring)
+    pub async fn get_sender(&self, symbol: &str) -> Option<SymbolUpdateTx> {
+        let senders = self.symbol_senders.lock().await;
+        senders.get(symbol).cloned()
+    }
 }
 
 /// The per-symbol worker: single writer for orderbook state, ensures sequence correctness.

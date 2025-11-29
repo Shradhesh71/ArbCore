@@ -3,5 +3,3 @@
 crates/strategy/ README.md
 
 crates/marketdata/README.md
-
-crates/marketdata/src/adapter_wiring.rs

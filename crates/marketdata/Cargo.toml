@@ -13,6 +13,7 @@ serde = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
 # tracing.workspace = true
 orderbook = { path = "../orderbook" }
+adapters = { path = "../adapters" }
 reqwest.workspace = true
 tokio-tungstenite.workspace = true
 futures.workspace = true

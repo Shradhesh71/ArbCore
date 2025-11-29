@@ -1,0 +1,14 @@
+[package]
+name = "execution"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+
+[dependencies]
+rust_decimal.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+strategy ={ path = "../strategy"}
