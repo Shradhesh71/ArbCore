@@ -3,8 +3,6 @@ use uuid::Uuid;
 
 use crate::{Opportunity, OrderLeg, StrategyConfig, TradePlan, errors::StrategyError};
 
-/// Round `qty` down to nearest `step_size`. If step_size == 0, returns qty unchanged.
-/// Uses floor rounding to avoid exceeding limits.
 pub fn round_qty_to_step(qty: Decimal, step_size: Decimal) -> Decimal {
     if step_size <= Decimal::ZERO {
         return qty;

@@ -3,3 +3,11 @@
 crates/strategy/ README.md
 
 crates/marketdata/README.md
+
+INTEGRATION_COMPLETE.md
+QUICKSTART.md
+crates/demo/README.md
+crates/demo/src/test_db.rs
+crates/demo/src/test_storage_integration.rs
+.env
+crates/marketdata/src/snapshot_sync.rs

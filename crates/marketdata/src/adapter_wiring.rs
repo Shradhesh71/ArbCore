@@ -52,7 +52,13 @@ where
     // Return the joinhandle so caller can await/shutdown if needed.
     let manager_clone = manager.clone();
     let forwarder = tokio::spawn(async move {
+        let mut update_count = 0u64;
         while let Some(update) = ws_rx.recv().await {
+            update_count += 1;
+            if update_count % 100 == 0 {
+                println!("📊 Received {} updates from adapter", update_count);
+            }
+            
             // adapter's OrderbookUpdate likely contains symbol, bids, asks, sequence
             // Map it into canonical OrderbookDelta or a Snapshot message if adapter flagged it
             match map_adapter_update_to_message(&update) {

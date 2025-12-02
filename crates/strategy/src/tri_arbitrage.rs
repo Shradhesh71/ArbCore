@@ -6,7 +6,7 @@ use marketdata::TriView;
 
 #[derive(Debug, Clone)]
 pub struct Opportunity {
-    pub start_currency: String, // e.g., C
+    pub start_currency: String,
     pub estimated_profit: Decimal,
     pub implied_price: Decimal,
     pub legs: Vec<LegEstimate>,
@@ -46,6 +46,12 @@ pub fn detect_triangular_opportunities(
 
         let final_c = a_amount * bid_ac * (Decimal::one() - fee_ac);
         let profit = final_c - start;
+
+        // Log every cycle calculation for debugging
+        if profit > dec!(0) {
+            println!("🔍 Cycle check: {}->{}->{} | profit={:.4} (threshold={:.4}) | prices: bc={}, ab={}, ac={}", 
+                view.sym_bc, view.sym_ab, view.sym_ac, profit, min_profit_abs, ask_bc, ask_ab, bid_ac);
+        }
 
         if profit > min_profit_abs {
             out.push(Opportunity {

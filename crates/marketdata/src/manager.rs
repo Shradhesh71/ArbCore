@@ -162,6 +162,7 @@ async fn per_symbol_worker(
                 // apply snapshot and drain buffered deltas (if any) in arrival order.
                 match book.apply_snapshot(snap.clone()) {
                     Ok(_) => {
+                        println!("✅ {} snapshot applied (seq={:?}), bids={}, asks={}", symbol, snap.sequence, snap.bids.len(), snap.asks.len());
                         snapshot_applied = true;
                         // drain buffered deltas
                         while let Some(delta) = buffered.pop_front() {

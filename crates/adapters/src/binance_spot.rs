@@ -20,7 +20,7 @@ impl BinanceSpotAdapter {
     pub fn new() -> Self {
         Self { 
             rest_base: "https://api.binance.com".to_string(),
-            ws_base: "wss://stream.binance.com:9443/ws".to_string(),
+            ws_base: "wss://stream.binance.com:9443/stream".to_string(),
             client: reqwest::Client::new(),
         }
     }
@@ -30,7 +30,7 @@ impl BinanceSpotAdapter {
     }
 
     fn ws_depth_url(&self, symbol: &str) -> String{
-        format!("{}/{}@depth@100ms", self.ws_base, symbol.to_lowercase())
+        format!("{}?streams={}@depth@100ms", self.ws_base, symbol.to_lowercase())
     }
 }
 
@@ -54,6 +54,14 @@ struct BinanceDepthEvent {
     bids: Vec<[String; 2]>,
     #[serde(rename = "a")]
     asks: Vec<[String; 2]>,
+}
+
+/// WebSocket combined stream wrapper
+#[derive(Debug, Deserialize)]
+struct BinanceStreamWrapper {
+    #[allow(dead_code)]
+    stream: String,
+    data: BinanceDepthEvent,
 }
 
 
@@ -141,9 +149,10 @@ impl ExchangeAdapter for BinanceSpotAdapter {
                             while let Some(msg) = read.next().await {
                                 match msg {
                                     Ok(Message::Text(txt)) => {
-                                        match serde_json::from_str::<BinanceDepthEvent>(&txt) {
-                                            Ok(evt) => {
-                                                match to_update_from_event(&evt) {
+                                        // Try parsing as combined stream wrapper first
+                                        match serde_json::from_str::<BinanceStreamWrapper>(&txt) {
+                                            Ok(wrapper) => {
+                                                match to_update_from_event(&wrapper.data) {
                                                     Ok(update) => {
                                                         if let Err(e) = tx_clone.send(update) {
                                                             error!("Binance ws send error for {}: {:?}", sym_clone, e);
@@ -156,7 +165,26 @@ impl ExchangeAdapter for BinanceSpotAdapter {
                                                 }
                                             }
                                             Err(e) => {
-                                                debug!("Binance ws json error {}: {:?}", sym_clone, e);
+                                                debug!("Binance ws json error {} (trying direct parse): {:?}", sym_clone, e);
+                                                // Fallback: try direct depth event parse (single stream format)
+                                                match serde_json::from_str::<BinanceDepthEvent>(&txt) {
+                                                    Ok(evt) => {
+                                                        match to_update_from_event(&evt) {
+                                                            Ok(update) => {
+                                                                if let Err(e) = tx_clone.send(update) {
+                                                                    error!("Binance ws send error for {}: {:?}", sym_clone, e);
+                                                                    break;
+                                                                }
+                                                            }
+                                                            Err(e) => {
+                                                                debug!("Binance depth parse error {}: {:?}", sym_clone, e);
+                                                            }
+                                                        }
+                                                    }
+                                                    Err(e2) => {
+                                                        debug!("Binance ws parse failed both formats {}: {:?}", sym_clone, e2);
+                                                    }
+                                                }
                                             }
                                         }
                                     }

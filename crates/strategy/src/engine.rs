@@ -109,6 +109,8 @@ pub struct StrategyEngine {
     /// in-flight plans (protected by mutex)
     inflight: Arc<Mutex<HashMap<String, InFlightPlan>>>,
     pub metrics: Arc<StrategyMetrics>,
+    #[cfg(feature = "storage")]
+    storage: Option<Arc<stroage::db::Storage>>,
 }
 
 impl StrategyEngine {
@@ -126,7 +128,16 @@ impl StrategyEngine {
             // risk_tx,
             inflight: Arc::new(Mutex::new(HashMap::new())),
             metrics: Arc::new(StrategyMetrics::default()),
+            #[cfg(feature = "storage")]
+            storage: None,
         }
+    }
+
+    /// Set storage backend (optional)
+    #[cfg(feature = "storage")]
+    pub fn with_storage(mut self, storage: Arc<stroage::db::Storage>) -> Self {
+        self.storage = Some(storage);
+        self
     }
 
     /// Start engine main loop(s). Spawns two tasks:
@@ -163,6 +174,11 @@ impl StrategyEngine {
         while let Some(view) = tri_rx.recv().await {
             self.metrics.opportunities_seen.fetch_add(1, Ordering::Relaxed);
 
+            // Log TriView reception
+            if self.metrics.opportunities_seen.load(Ordering::Relaxed) % 10 == 0 {
+                println!("Strategy received {} TriView updates", self.metrics.opportunities_seen.load(Ordering::Relaxed));
+            }
+
             // decide start_amount (use configured max_notional or a sane default)
             let start_amount = if cfg.limits.max_notional > Decimal::ZERO {
                 cfg.limits.max_notional
@@ -172,6 +188,10 @@ impl StrategyEngine {
 
             // pure detection
             let ops = detect_triangular_opportunities(&view, fee_map, start_amount );
+
+            if !ops.is_empty() {
+                println!("Found {} arbitrage opportunities!", ops.len());
+            }
 
             if ops.is_empty() {
                 // debug!("no opportunities");
@@ -306,6 +326,51 @@ impl StrategyEngine {
     async fn handle_exec_report(&self, report: ExecutionReport) {
         let plan_id = &report.plan_id;
         let mut remove_plan = false;
+        
+        // Extract data for storage persistence
+        let storage_data = {
+            let infl = self.inflight.lock();
+            infl.get(plan_id).and_then(|p| {
+                let leg_idx = report.leg_idx as usize;
+                if leg_idx >= p.plan.legs.len() {
+                    return None;
+                }
+                let leg = &p.plan.legs[leg_idx];
+                let side = if leg.buy_base { "buy" } else { "sell" };
+                let status = match &report.status {
+                    ExecStatus::New => "new",
+                    ExecStatus::PartiallyFilled => "partial",
+                    ExecStatus::Filled => "filled",
+                    ExecStatus::Cancelled => "cancelled",
+                    ExecStatus::Rejected => "rejected",
+                    ExecStatus::Error(_) => "error",
+                };
+                Some((leg.symbol.clone(), side.to_string(), leg.price_hint, status.to_string()))
+            })
+        };
+        
+        // Persist to database if storage is configured
+        #[cfg(feature = "storage")]
+        if let (Some(storage), Some((symbol, side, price, status))) = (&self.storage, storage_data) {
+            match storage.trades().insert_fill(
+                plan_id,
+                report.leg_idx as i32,
+                &symbol,
+                &side,
+                report.filled_qty,
+                price,
+                &status,
+                "binance"
+            ).await {
+                Ok(fill) => {
+                    tracing::debug!("Persisted fill {} for plan {} leg {}", fill.id, plan_id, report.leg_idx);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to persist fill for plan {} leg {}: {:?}", plan_id, report.leg_idx, e);
+                }
+            }
+        }
+        
         {
             let mut infl = self.inflight.lock();
             if let Some(p) = infl.get_mut(plan_id) {

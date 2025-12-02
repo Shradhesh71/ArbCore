@@ -1,4 +1,3 @@
-// crates/marketdata/src/triview.rs
 //! TriView builder: produce consistent lightweight views of three orderbooks (triangle)
 //! and publish them to subscribers.
 //!
@@ -124,6 +123,18 @@ impl TriViewBuilder {
                             (Ok(a_snap), Ok(b_snap), Ok(c_snap)) => {
                                 // build tri view picking top_n levels
                                 let tv = build_triview_from_snapshots(&sym_ab, &a_snap, &sym_bc, &b_snap, &sym_ac, &c_snap, top_n);
+                                
+                                // Log TriView statistics periodically
+                                static TRIVIEW_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                                let count = TRIVIEW_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                if count % 10 == 0 {
+                                    println!("📈 TriView #{}: {} bids_ab={} asks_ab={}, {} bids_bc={} asks_bc={}, {} bids_ac={} asks_ac={}",
+                                        count,
+                                        tv.sym_ab, tv.bids_ab.len(), tv.asks_ab.len(),
+                                        tv.sym_bc, tv.bids_bc.len(), tv.asks_bc.len(),
+                                        tv.sym_ac, tv.bids_ac.len(), tv.asks_ac.len());
+                                }
+                                
                                 // simple backpressure: don't spam if receiver is slow; use try_send fallback
                                 match tx.try_send(tv.clone()) {
                                     Ok(_) => { }

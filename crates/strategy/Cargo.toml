@@ -7,6 +7,10 @@ license.workspace = true
 readme.workspace = true
 repository.workspace = true
 
+[features]
+default = []
+storage = ["dep:stroage"]
+
 [dependencies]
 rust_decimal = {workspace = true, features = ["serde"]}
 serde = {workspace = true, features = ["derive"]}
@@ -18,3 +22,5 @@ tokio ={workspace = true, features = ["rt", "time", "macros", "sync"]}
 uuid = {workspace = true, features = ["v4"]}
 orderbook = { path = "../orderbook" }
 marketdata = { path = "../marketdata" }
+stroage = { path = "../stroage", optional = true }
+tracing = { workspace = true }

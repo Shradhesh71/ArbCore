@@ -1,4 +1,3 @@
-//  use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 pub use orderbook::types::{

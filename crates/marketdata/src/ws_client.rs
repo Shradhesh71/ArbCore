@@ -1,4 +1,3 @@
-// crates/marketdata/src/ws_client.rs
 use futures::{SinkExt, StreamExt};
 use std::time::Duration;
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};

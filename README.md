@@ -119,7 +119,20 @@ All adapters are implemented and integrated:
 * ✅ BinanceSpotAdapter with REST + WebSocket
 * ✅ Adapter wiring connected to marketdata manager
 * ✅ End-to-end data flow working
+* ✅ **Mock execution layer** for paper trading
 * 🔄 Ready for live testing with real Binance data
+
+### Running the Paper Trading Demo
+
+Test the complete system with **no real money, no API keys, no risk**:
+
+```bash
+# Run mock execution demo (paper trading)
+cargo run -p arb-demo --bin mock_execution_demo
+
+# With detailed logging
+RUST_LOG=info cargo run -p arb-demo --bin mock_execution_demo
+```
 
 ### **B) Next Implementation Priorities**
 
