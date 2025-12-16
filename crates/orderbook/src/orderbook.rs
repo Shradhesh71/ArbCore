@@ -120,6 +120,58 @@ impl OrderBook {
         Ok(())
     }
 
+    /// Apply delta with sequence gap tolerance for low-latency trading
+    /// If the gap is within max_gap, accept it and update sequence
+    /// This avoids expensive REST API calls for minor sequence mismatches
+    pub fn apply_delta_with_gap_tolerance(
+        &self,
+        delta: OrderbookDelta,
+        max_gap: u64,
+    ) -> Result<(), OrderBookError> {
+        let mut w = self.inner.write();
+        
+        // Check sequence with tolerance
+        if let Some(prev) = w.last_seq {
+            if let Some(d_prev) = delta.prev_sequence {
+                if d_prev != prev {
+                    let gap = if d_prev > prev {
+                        d_prev - prev
+                    } else {
+                        prev - d_prev
+                    };
+                    
+                    if gap > max_gap {
+                        // Gap too large, require resync
+                        self.resync_required.store(true, Ordering::SeqCst);
+                        return Err(OrderBookError::SequenceError { expected: prev, got: d_prev });
+                    }
+                    // Gap is acceptable, continue with update and adjust sequence
+                }
+            }
+        }
+        
+        // Apply the delta updates
+        for lvl in delta.bids {
+            if lvl.size == Decimal::ZERO {
+                w.bids.remove(&lvl.price);
+            } else {
+                w.bids.insert(lvl.price, lvl.size);
+            }
+        }
+        for lvl in delta.asks {
+            if lvl.size == Decimal::ZERO {
+                w.asks.remove(&lvl.price);
+            } else {
+                w.asks.insert(lvl.price, lvl.size);
+            }
+        }
+        
+        w.last_seq = delta.sequence;
+        w.last_update_ts = Some(Instant::now());
+        self.resync_required.store(false, Ordering::SeqCst);
+        Ok(())
+    }
+
     pub fn estimate_fill_price(&self, side: Side, mut target_size: Decimal) -> Result<EstimatedFill, OrderBookError> {
         if target_size <= Decimal::ZERO {
             return Err(OrderBookError::InvalidArgument("size must be > 0".into()));

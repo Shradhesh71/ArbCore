@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::{Arc, atomic::{AtomicU64, Ordering}}, time::{Duration, Instant}};
 use marketdata::TriView;
-use rust_decimal_macros::dec;
+// use rust_decimal_macros::dec;
 use parking_lot::Mutex;
 use rust_decimal::Decimal;
 use tokio::sync::mpsc;
@@ -180,14 +180,14 @@ impl StrategyEngine {
             }
 
             // decide start_amount (use configured max_notional or a sane default)
-            let start_amount = if cfg.limits.max_notional > Decimal::ZERO {
-                cfg.limits.max_notional
-            } else {
-                dec!(100) // fallback start amount (quote currency)
-            };
+            // let start_amount = if cfg.limits.max_notional > Decimal::ZERO {
+            //     cfg.limits.max_notional
+            // } else {
+            //     dec!(100) // fallback start amount (quote currency)
+            // };
 
             // pure detection
-            let ops = detect_triangular_opportunities(&view, fee_map, start_amount );
+            let ops = detect_triangular_opportunities(&view, fee_map, cfg.limits.min_profit_abs);
 
             if !ops.is_empty() {
                 println!("Found {} arbitrage opportunities!", ops.len());

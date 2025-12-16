@@ -72,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         symbols_to_wire.clone(),
     ).await?;
 
-    info!("✅ Market data adapter connected");
+    info!("Market data adapter connected");
 
     // ====================================================================
     // 2) Symbols already wired above

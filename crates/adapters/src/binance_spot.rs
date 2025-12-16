@@ -26,7 +26,7 @@ impl BinanceSpotAdapter {
     }
 
     fn depth_url(&self, symbol: &str, limit: u32) -> String {
-        format!("{}/api/v3/depth?symbol={}&limit={}",self.rest_base,symbol.to_lowercase(),limit)
+        format!("{}/api/v3/depth?symbol={}&limit={}",self.rest_base,symbol.to_uppercase(),limit)
     }
 
     fn ws_depth_url(&self, symbol: &str) -> String{

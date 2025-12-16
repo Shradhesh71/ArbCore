@@ -1,6 +1,6 @@
 use std::{collections::{HashMap, VecDeque}, sync::Arc, pin::Pin, future::Future};
 
-use orderbook::{OrderbookDelta, OrderbookSnapshot, OrderBook};
+use orderbook::{OrderbookDelta, OrderbookSnapshot, OrderBook, OrderBookError};
 use tokio::sync::{Mutex, mpsc};
 
 use crate::errors::MarketDataError;
@@ -31,13 +31,17 @@ pub struct SymbolWorkerConfig {
     pub max_buffered_deltas: usize,
     /// maximum time to wait for a snapshot after worker creation (ms)
     pub snapshot_wait_ms: u64,
+    /// maximum acceptable sequence gap before forcing resync (0 = strict, >0 = tolerant)
+    /// For high-frequency trading, recommend 10-50 to avoid unnecessary REST calls
+    pub max_acceptable_sequence_gap: u64,
 }
 
 impl Default for SymbolWorkerConfig {
     fn default() -> Self {
         Self {
-            max_buffered_deltas: 5_000, // conservative default
+            max_buffered_deltas: 5_000,
             snapshot_wait_ms: 5_000,
+            max_acceptable_sequence_gap: 1000, // Accept gaps up to 100 for low latency (Binance is fast)
         }
     }
 }
@@ -146,53 +150,32 @@ async fn per_symbol_worker(
         match book.apply_snapshot(snap.clone()) {
             Ok(_) => {
                 snapshot_applied = true;
+                println!("{} snapshot initialized (seq={:?})", symbol, snap.sequence);
             }
             Err(e) => {
-                println!("failed to apply proactive snapshot for {}: {:?}", symbol, e);
+                println!("{} failed to apply initial snapshot: {:?}", symbol, e);
             }
         }
     } else {
-        println!("no snapshot provider for {}; will wait for Snapshot message from adapter", symbol);
+        println!("{} waiting for snapshot from adapter", symbol);
     }
 
     // main loop: process messages, buffer deltas until snapshot applied
     while let Some(msg) = rx.recv().await {
         match msg {
             SymbolMessage::Snapshot(snap) => {
-                // apply snapshot and drain buffered deltas (if any) in arrival order.
+                // apply snapshot and clear buffered deltas (they're likely stale)
                 match book.apply_snapshot(snap.clone()) {
                     Ok(_) => {
-                        println!("✅ {} snapshot applied (seq={:?}), bids={}, asks={}", symbol, snap.sequence, snap.bids.len(), snap.asks.len());
                         snapshot_applied = true;
-                        // drain buffered deltas
-                        while let Some(delta) = buffered.pop_front() {
-                            if let Err(e) = apply_delta_with_resync_if_needed(&symbol, &book, delta.clone(), &snapshot_providers).await {
-                                println!("error applying buffered delta for {}: {:?} -> triggering resync", symbol, e);
-                                // If applying buffered delta failed, attempt full resync and clear buffered
-                                if let Some(new_snap) = fetch_snapshot_for(&snapshot_providers, &symbol).await {
-                                    if let Err(err) = book.apply_snapshot(new_snap) {
-                                        println!("failed to apply resync snapshot for {}: {:?}", symbol, err);
-                                    } else {
-                                        println!("resync snapshot applied successfully for {}", symbol);
-                                    }
-                                } else {
-                                    println!("no snapshot provider to resync {}", symbol);
-                                }
-                                buffered.clear();
-                                break;
-                            }
+                        // Clear buffered deltas - they're likely too old to apply after snapshot
+                        if !buffered.is_empty() {
+                            buffered.clear();
                         }
                     }
-                    Err(e) => {
-                        println!("apply_snapshot failed for {}: {:?}", symbol, e);
-                        // If snapshot application fails, attempt resync if provider exists
-                        if let Some(new_snap) = fetch_snapshot_for(&snapshot_providers, &symbol).await {
-                            if let Err(err) = book.apply_snapshot(new_snap) {
-                                println!("failed to apply fetched snapshot for {}: {:?}", symbol, err);
-                            } else {
-                                snapshot_applied = true;
-                            }
-                        }
+                    Err(_e) => {
+                        // Snapshot failed, just continue and wait for next update
+                        buffered.clear();
                     }
                 }
             }
@@ -216,34 +199,26 @@ async fn per_symbol_worker(
                     continue;
                 }
 
-                // Snapshot already applied: try to apply delta.
-                if let Err(e) = book.apply_delta(delta.clone()) {
-                    // sequence or other error -> attempt resync via provider
-                    println!("apply_delta error for {}: {:?}. Attempting resync.", symbol, e);
-                    // try to use snapshot provider to resync
-                    if let Some(new_snap) = fetch_snapshot_for(&snapshot_providers, &symbol).await {
-                        match book.apply_snapshot(new_snap.clone()) {
-                            Ok(_) => {
-                                println!("resync snapshot applied for {} after delta error", symbol);
-                                // not guaranteed buffered deltas include current delta; try to re-apply it
-                                if let Err(e2) = book.apply_delta(delta.clone()) {
-                                    println!("failed to reapply delta after resync for {}: {:?}", symbol, e2);
-                                }
-                            }
-                            Err(e3) => {
-                                println!("failed to apply resync snapshot for {}: {:?}", symbol, e3);
-                            }
+                // Snapshot already applied: try to apply delta with gap tolerance
+                if let Err(e) = book.apply_delta_with_gap_tolerance(delta.clone(), cfg.max_acceptable_sequence_gap) {
+                    // Large sequence gap detected, need resync
+                    if cfg.max_acceptable_sequence_gap > 0 {
+                        // Log only when we actually need to resync (rare with gap tolerance)
+                        if let OrderBookError::SequenceError { expected, got } = e {
+                            let gap = if got > expected { got - expected } else { expected - got };
+                            println!("{} large sequence gap detected: {} (threshold: {}), resyncing...", 
+                                symbol, gap, cfg.max_acceptable_sequence_gap);
                         }
+                    }
+                    
+                    // Fetch fresh snapshot only for large gaps
+                    if let Some(new_snap) = fetch_snapshot_for(&snapshot_providers, &symbol).await {
+                        let _ = book.apply_snapshot(new_snap.clone());
                     } else {
-                        // no snapshot provider — set resync_required flag in orderbook and continue
-                        println!("no snapshot provider available for {}; marking resync_required", symbol);
-                        // OrderBook has exposed resync_required atomic in previous design
                         book.resync_required.store(true, std::sync::atomic::Ordering::SeqCst);
                     }
-                } else {
-                    // success
-                    // optionally: emit notification to subscribers / tri-view builder here
                 }
+                // Continue processing - small gaps are handled transparently
             }
         }
     }
@@ -260,56 +235,9 @@ async fn fetch_snapshot_for(
         // call snapshot fn
         match sf(symbol.to_string()).await {
             Ok(snap) => Some(snap),
-            Err(_e) => {
-                None
-            }
+            Err(_e) => None
         }
     } else {
         None
-    }
-}
-
-/// Helper: attempt apply delta, and if a sequence error occurs, perform resync via snapshot provider.
-/// Returns Ok(()) if delta applied (or resync succeeded and delta applied); Err otherwise.
-async fn apply_delta_with_resync_if_needed(
-    symbol: &str,
-    book: &OrderBook,
-    delta: OrderbookDelta,
-    snapshot_providers: &Arc<Mutex<HashMap<String, SnapshotFn>>>,
-) -> Result<(), MarketDataError> {
-    match book.apply_delta(delta.clone()) {
-        Ok(_) => return Ok(()),
-        Err(e) => {
-            println!("apply_delta returned error for {}: {:?}. Attempting resync", symbol, e);
-            // attempt to fetch snapshot
-            let provider_opt = {
-                let mp = snapshot_providers.lock().await;
-                mp.get(symbol).cloned()
-            };
-            if let Some(sf) = provider_opt {
-                match sf(symbol.to_string()).await {
-                    Ok(snap) => {
-                        if let Err(e2) = book.apply_snapshot(snap) {
-                            println!("apply_snapshot failed during resync for {}: {:?}", symbol, e2);
-                            return Err(MarketDataError::Other(format!("resync apply_snapshot failed: {:?}", e2)));
-                        }
-                        // after resync, try to apply delta again
-                        if let Err(e3) = book.apply_delta(delta) {
-                            println!("delta reapply failed after resync for {}: {:?}", symbol, e3);
-                            return Err(MarketDataError::Other(format!("delta reapply failed after resync: {:?}", e3)));
-                        }
-                        return Ok(());
-                    }
-                    Err(e_fetch) => {
-                        println!("snapshot provider error for {}: {:?}", symbol, e_fetch);
-                        return Err(MarketDataError::Other(format!("snapshot provider error: {:?}", e_fetch)));
-                    }
-                }
-            } else {
-                // no provider
-                println!("no snapshot provider for {} — cannot resync", symbol);
-                return Err(MarketDataError::Other("no snapshot provider".into()));
-            }
-        }
     }
 }

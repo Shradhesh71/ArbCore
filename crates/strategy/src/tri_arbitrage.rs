@@ -47,10 +47,12 @@ pub fn detect_triangular_opportunities(
         let final_c = a_amount * bid_ac * (Decimal::one() - fee_ac);
         let profit = final_c - start;
 
-        // Log every cycle calculation for debugging
-        if profit > dec!(0) {
-            println!("🔍 Cycle check: {}->{}->{} | profit={:.4} (threshold={:.4}) | prices: bc={}, ab={}, ac={}", 
-                view.sym_bc, view.sym_ab, view.sym_ac, profit, min_profit_abs, ask_bc, ask_ab, bid_ac);
+        // Log every 100th cycle calculation for debugging
+        static CYCLE_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let count = CYCLE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if count % 100 == 0 {
+            println!("🔍 Cycle #{}: {}->{}->{} | profit={:.8} (threshold={:.8}) | prices: bc={}, ab={}, ac={}", 
+                count, view.sym_bc, view.sym_ab, view.sym_ac, profit, min_profit_abs, ask_bc, ask_ab, bid_ac);
         }
 
         if profit > min_profit_abs {
