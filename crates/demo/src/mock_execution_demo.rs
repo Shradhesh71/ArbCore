@@ -122,9 +122,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ====================================================================
     // 4) Setup Strategy Config
     let mut fee_map = std::collections::HashMap::new();
-    fee_map.insert("BTCUSDT".to_string(), FeeInfo { maker: dec!(0.0001), taker: dec!(0.001) });
-    fee_map.insert("ETHUSDT".to_string(), FeeInfo { maker: dec!(0.0001), taker: dec!(0.001) });
-    fee_map.insert("ETHBTC".to_string(), FeeInfo { maker: dec!(0.0001), taker: dec!(0.001) });
+    fee_map.insert("BTCUSDT".to_string(), FeeInfo { maker: dec!(0.0001), taker: dec!(0.0005) });
+    fee_map.insert("ETHUSDT".to_string(), FeeInfo { maker: dec!(0.0001), taker: dec!(0.0005) });
+    fee_map.insert("ETHBTC".to_string(), FeeInfo { maker: dec!(0.0001), taker: dec!(0.0005) });
 
     let mut lot_rules = std::collections::HashMap::new();
     lot_rules.insert("BTCUSDT".to_string(), LotRule { 

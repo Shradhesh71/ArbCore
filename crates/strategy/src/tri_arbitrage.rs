@@ -26,63 +26,143 @@ pub fn detect_triangular_opportunities(
     min_profit_abs: Decimal
 ) -> Vec<Opportunity> {
     let mut out = Vec::new();
+    
+    static CYCLE_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let count = CYCLE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-    // compute cycle C -> B -> A -> C
-    let start = dec!(1);
-    let ask_bc = view.asks_bc.first().map(| (p, _)| *p);
-    let ask_ab = view.asks_ab.first().map(| (p, _)| *p);
-    let bid_ac = view.bids_ac.first().map( |(p,_)| *p);
+    // Get fees for each symbol
+    let fee_ab = fee_map.get(&view.sym_ab).map(|f| f.taker).unwrap_or(dec!(0));
+    let fee_bc = fee_map.get(&view.sym_bc).map(|f| f.taker).unwrap_or(dec!(0));
+    let fee_ac = fee_map.get(&view.sym_ac).map(|f| f.taker).unwrap_or(dec!(0));
 
-    if let (Some(ask_bc), Some(ask_ab), Some(bid_ac)) = (ask_bc, ask_ab, bid_ac) {
-        // fee per
-        let fee_bc = fee_map.get(&view.sym_bc).map(|f| f.taker).unwrap_or(dec!(0));
-        let fee_ab = fee_map.get(&view.sym_ab).map(|f| f.taker).unwrap_or(dec!(0));
-        let fee_ac = fee_map.get(&view.sym_ac).map(|f| f.taker).unwrap_or(dec!(0));
+    // ===================================================================
+    // CYCLE 1: AB -> BC -> AC
+    // Example: BTCUSDT(ab) -> ETHUSDT(bc) -> ETHBTC(ac)
+    // Start with 1 unit of base currency (USDT)
+    // 1. Buy BTC with USDT at ask price on BTCUSDT
+    // 2. Buy ETH with BTC at ask price on ETHBTC (inverse of ac) 
+    // 3. Sell ETH for USDT at bid price on ETHUSDT
+    // ===================================================================
+    if let (Some(ask_ab), Some(bid_bc), Some(ask_ac)) = (
+        view.asks_ab.first().map(|(p, _)| *p),
+        view.bids_bc.first().map(|(p, _)| *p),
+        view.asks_ac.first().map(|(p, _)| *p),
+    ) {
+        let start = dec!(10000); // Start with 10000 USDT
+        
+        // Step 1: Buy BTC with USDT on BTCUSDT (ab)
+        let btc_amount = (start / ask_ab) * (Decimal::one() - fee_ab);
+        
+        // Step 2: Buy ETH with BTC on ETHBTC (we need to use 1/ask_ac because ETHBTC = ETH/BTC)
+        let eth_amount = (btc_amount / ask_ac) * (Decimal::one() - fee_ac);
+        
+        // Step 3: Sell ETH for USDT on ETHUSDT (bc)
+        let final_usdt = (eth_amount * bid_bc) * (Decimal::one() - fee_bc);
+        
+        let profit1 = final_usdt - start;
+        let profit_pct1 = (profit1 / start) * dec!(100);
 
-        // simulate: start C -> buy B at ask_bc (we lose fee on notional)
-        let b_amount = (start / ask_bc) * (Decimal::one() - fee_bc);
-
-        let a_amount = (b_amount / ask_ab) * (Decimal::one() - fee_ab);
-
-        let final_c = a_amount * bid_ac * (Decimal::one() - fee_ac);
-        let profit = final_c - start;
-
-        // Log every 100th cycle calculation for debugging
-        static CYCLE_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let count = CYCLE_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         if count % 100 == 0 {
-            println!("🔍 Cycle #{}: {}->{}->{} | profit={:.8} (threshold={:.8}) | prices: bc={}, ab={}, ac={}", 
-                count, view.sym_bc, view.sym_ab, view.sym_ac, profit, min_profit_abs, ask_bc, ask_ab, bid_ac);
+            println!("🔍 Cycle #{}: {} -> {} -> {} | profit={:.8} USDT ({:.4}%) | prices: {}={:.2}, {}={:.2}, {}={:.8}", 
+                count, view.sym_ab, view.sym_ac, view.sym_bc, 
+                profit1, profit_pct1,
+                view.sym_ab, ask_ab, 
+                view.sym_bc, bid_bc, 
+                view.sym_ac, ask_ac);
         }
 
-        if profit > min_profit_abs {
+        if profit1 > min_profit_abs {
             out.push(Opportunity {
-                start_currency: "C".to_string(),
-                estimated_profit: profit,
-                implied_price: bid_ac - (ask_ab * ask_bc),
+                start_currency: "USDT".to_string(),
+                estimated_profit: profit1,
+                implied_price: bid_bc / (ask_ab * ask_ac),
                 legs: vec![
-                    LegEstimate{
-                        symbol: view.sym_bc.clone(),
-                        side_buy: true,
-                        price: ask_bc, 
-                        qty: start
-                    },
-                    LegEstimate{
+                    LegEstimate {
                         symbol: view.sym_ab.clone(),
                         side_buy: true,
                         price: ask_ab,
-                        qty: b_amount
+                        qty: start / ask_ab,
                     },
-                    LegEstimate{
+                    LegEstimate {
                         symbol: view.sym_ac.clone(),
                         side_buy: true,
-                        price: bid_ac,
-                        qty: a_amount
-                    }
-                ]
+                        price: ask_ac,
+                        qty: btc_amount / ask_ac,
+                    },
+                    LegEstimate {
+                        symbol: view.sym_bc.clone(),
+                        side_buy: false, // SELL ETH for USDT
+                        price: bid_bc,
+                        qty: eth_amount,
+                    },
+                ],
             });
         }
+    }
 
+    // ===================================================================
+    // CYCLE 2: BC -> AC -> AB (Reverse direction)
+    // Example: ETHUSDT(bc) -> ETHBTC(ac) -> BTCUSDT(ab)
+    // Start with 1 unit of base currency (USDT)
+    // 1. Buy ETH with USDT at ask price on ETHUSDT
+    // 2. Sell ETH for BTC at bid price on ETHBTC
+    // 3. Sell BTC for USDT at bid price on BTCUSDT
+    // ===================================================================
+    if let (Some(ask_bc), Some(bid_ac), Some(bid_ab)) = (
+        view.asks_bc.first().map(|(p, _)| *p),
+        view.bids_ac.first().map(|(p, _)| *p),
+        view.bids_ab.first().map(|(p, _)| *p),
+    ) {
+        let start = dec!(10000); // Start with 10000 USDT
+        
+        // Step 1: Buy ETH with USDT on ETHUSDT (bc)
+        let eth_amount = (start / ask_bc) * (Decimal::one() - fee_bc);
+        
+        // Step 2: Sell ETH for BTC on ETHBTC (ac)
+        let btc_amount = (eth_amount * bid_ac) * (Decimal::one() - fee_ac);
+        
+        // Step 3: Sell BTC for USDT on BTCUSDT (ab)
+        let final_usdt = (btc_amount * bid_ab) * (Decimal::one() - fee_ab);
+        
+        let profit2 = final_usdt - start;
+        let profit_pct2 = (profit2 / start) * dec!(100);
+
+        if count % 100 == 0 {
+            println!("🔄 Cycle #{}: {} -> {} -> {} | profit={:.8} USDT ({:.4}%) | prices: {}={:.2}, {}={:.8}, {}={:.2}", 
+                count, view.sym_bc, view.sym_ac, view.sym_ab,
+                profit2, profit_pct2,
+                view.sym_bc, ask_bc,
+                view.sym_ac, bid_ac,
+                view.sym_ab, bid_ab);
+        }
+
+        if profit2 > min_profit_abs {
+            out.push(Opportunity {
+                start_currency: "USDT".to_string(),
+                estimated_profit: profit2,
+                implied_price: (bid_ab * bid_ac) / ask_bc,
+                legs: vec![
+                    LegEstimate {
+                        symbol: view.sym_bc.clone(),
+                        side_buy: true,
+                        price: ask_bc,
+                        qty: start / ask_bc,
+                    },
+                    LegEstimate {
+                        symbol: view.sym_ac.clone(),
+                        side_buy: false, // SELL ETH for BTC
+                        price: bid_ac,
+                        qty: eth_amount,
+                    },
+                    LegEstimate {
+                        symbol: view.sym_ab.clone(),
+                        side_buy: false, // SELL BTC for USDT
+                        price: bid_ab,
+                        qty: btc_amount,
+                    },
+                ],
+            });
+        }
     }
 
     out

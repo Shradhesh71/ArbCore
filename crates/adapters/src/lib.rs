@@ -7,3 +7,5 @@ pub use error::*;
 pub use types::*;
 pub use exchange::*;
 pub use binance_spot::*;
+
+// cargo run --bin mock_execution_demo 
