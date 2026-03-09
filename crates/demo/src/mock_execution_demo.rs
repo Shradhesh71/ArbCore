@@ -1,13 +1,3 @@
-/// Example: Wire StrategyEngine with Mock Execution Layer
-///
-/// This demonstrates a complete live testing setup with:
-/// - Real market data from Binance via adapters
-/// - Real orderbook management
-/// - Real TriView detection
-/// - MOCK execution (no real orders, no money, no keys)
-///
-/// Perfect for testing strategy logic before connecting to real execution.
-
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::time::{Duration, sleep};
@@ -33,8 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    info!("🚀 Starting Mock Execution Demo");
-    info!("mode: PAPER TRADING (No real orders, no money)");
+    info!("Starting Mock Execution Demo");
 
 
     // ============
@@ -42,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgresql://postgres:postgres@localhost:5432/tri_arb".to_string());
     
-    info!("🗄️  Connecting to database...");
+    info!("Connecting to database...");
     let storage = Storage::connect(&database_url, 5).await?;
     
     // Check existing fills
@@ -66,16 +55,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "ETHBTC".to_string(),
     ];
     
+    // 2) Symbols wire
+    // ====================================================================
     marketdata::adapter_wiring::wire_adapter_to_manager(
         md_manager.clone(),
         adapter.clone(),
         symbols_to_wire.clone(),
     ).await?;
-
-    info!("Market data adapter connected");
-
-    // ====================================================================
-    // 2) Symbols already wired above
+    
     info!("Subscribed to symbols: {:?}", symbols_to_wire);
 
     // Give market data a moment to start receiving updates
@@ -153,8 +140,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         fee_map,
         limits: Limits {
             max_notional: dec!(10000.0),    // Increased from $100 to $10,000 notional
-            min_profit_abs: dec!(0.01),     // minimum $0.01 profit (very low for testing)
-            min_profit_pct: dec!(0.0001),   // minimum 0.01% profit (very low for testing)
+            min_profit_abs: dec!(10),     // minimum $10 profit (very low for testing)
+            min_profit_pct: dec!(0.001),   // minimum 0.01% profit (very low for testing)
             depth_fill_factor: 0.8,         // use 80% of available depth
         },
         aggression: Aggression::Aggressive,
@@ -254,25 +241,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         result = detector_handle => {
             match result {
-                Ok(_) => info!("✅ Detector loop completed"),
-                Err(e) => error!("❌ Detector loop error: {}", e),
+                Ok(_) => info!("Detector loop completed"),
+                Err(e) => error!("Detector loop error: {}", e),
             }
         }
         result = monitor_handle => {
             match result {
-                Ok(_) => info!("✅ Monitor loop completed"),
-                Err(e) => error!("❌ Monitor loop error: {}", e),
+                Ok(_) => info!("Monitor loop completed"),
+                Err(e) => error!("Monitor loop error: {}", e),
             }
         }
         result = mock_exec_handle => {
             match result {
-                Ok(_) => info!("✅ Mock execution completed"),
-                Err(e) => error!("❌ Mock execution error: {}", e),
+                Ok(_) => info!("Mock execution completed"),
+                Err(e) => error!("Mock execution error: {}", e),
             }
         }
     }
 
-    info!("👋 Shutting down gracefully...");
+    info!("Shutting down gracefully...");
 
     Ok(())
 }

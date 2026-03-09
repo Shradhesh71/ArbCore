@@ -44,7 +44,7 @@ impl Default for SymbolWorkerConfig {
             max_acceptable_sequence_gap: 1000, // Accept gaps up to 100 for low latency (Binance is fast)
         }
     }
-}
+} 
 
 /// High-level manager that wires adapters -> per-symbol workers -> orderbook
 pub struct MarketDataManager {

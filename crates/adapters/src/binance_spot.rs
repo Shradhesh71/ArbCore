@@ -17,7 +17,7 @@ pub struct BinanceSpotAdapter {
 }
 
 impl BinanceSpotAdapter {
-    pub fn new() -> Self {
+    pub fn new() -> Self { 
         Self { 
             rest_base: "https://api.binance.com".to_string(),
             ws_base: "wss://stream.binance.com:9443/stream".to_string(),

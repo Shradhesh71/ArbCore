@@ -19,7 +19,7 @@ use orderbook::types::{OrderbookSnapshot as OBSnapshot, OrderbookDelta as OBDelt
 /// 1. registers a SnapshotFn that calls adapter.get_snapshot(symbol)
 /// 2. starts the adapter websocket feed (adapter.connect_ws) and forwards OrderbookUpdate messages into manager
 pub async fn wire_adapter_to_manager<A>(
-    manager: Arc<MarketDataManager>,
+    manager: Arc<MarketDataManager>, 
     adapter: A,
     symbols: Vec<String>,
 ) -> Result<Vec<JoinHandle<()>>, MarketDataError>
